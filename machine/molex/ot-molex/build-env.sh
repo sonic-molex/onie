@@ -1,5 +1,8 @@
 #!/bin/sh
 
+# Copyright (C) 2023  Molex Corporation
+# ONIE build environment script
+
 sudo apt-get update
 sudo apt-get install -y build-essential stgit u-boot-tools \
     util-linux gperf device-tree-compiler python-all-dev \

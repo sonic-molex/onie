@@ -1,6 +1,6 @@
-# Copyright (C) 2015  Intel Corporation
+# Copyright (C) 2023  Molex Corporation
 
-# Intel(R) Atom C2000 CPP
+# Intel(R) Atom X6425E CPP
 
 ONIE_ARCH = x86_64
 FIRMWARE_TYPE = uefi
