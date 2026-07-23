@@ -56,8 +56,21 @@ FIRMWARE_UPDATE_ENABLE = yes
 # Do not modify Ethernet management MACs programmed by hypervisor.
 SKIP_ETHMGMT_MACS = yes
 
-# Enable building of secure boot binaries
-SECURE_BOOT_ENABLE = yes
+# Secure boot is intentionally disabled for the otn-kvm virtual platform.
+#
+# With SECURE_BOOT_ENABLE=yes, grub.make's grub-install-sb step does
+# "rm -rf $(SYSROOTDIR)/usr/lib/grub/$(ARCH)-efi", stripping the loose
+# x86_64-efi grub modules from the ONIE runtime (only the signed monolithic
+# grubx64.efi is kept for ONIE's own secure boot). The SONiC otn-kvm image is
+# built secure_boot=no, so its ONIE installer takes the regular UEFI grub path
+# ("grub-install --target=x86_64-efi") which needs those loose modules -> it
+# fails with "/usr/lib/grub/x86_64-efi/modinfo.sh doesn't exist" and the UEFI
+# KVM build hangs. Disabling secure boot keeps the x86_64-efi modules in the
+# runtime, matching upstream's UEFI-capable /onie/efi/ kvm recovery image
+# (which also ships no shim). OVMF in scripts/build_kvm_image.sh does not
+# enforce secure boot (default OVMF_VARS, no PK enrolled), so an unsigned
+# grubx64.efi boots fine.
+SECURE_BOOT_ENABLE = no
 
 # ONIE_VENDOR_SECRET_KEY_PEM -- file system path to private RSA key
 # encoded in PEM format.
