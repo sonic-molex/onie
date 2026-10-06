@@ -1,0 +1,135 @@
+# ONIE build environment for CI.
+#
+# Debian 11 is required: onie/build-config/Makefile still pulls in
+# python2-era tooling (python-all-dev) that is unavailable on newer
+# Debian releases.
+#
+# This image builds the generic kvm_x86_64 target with secure boot
+# enabled.  It includes the secure-boot key-generation and EFI signing
+# tooling (gnupg2, efitools, sbsigntool), the NSS command-line tools the
+# shim signing step shells out to (libnss3-tools: pk12util/certutil), and
+# the build dependencies for the pesign that ONIE compiles from source
+# (NSS/NSPR dev packages).
+FROM debian:11
+WORKDIR /onie
+
+# Tolerate transient Debian mirror hiccups (connection resets mid-fetch).
+RUN echo 'Acquire::Retries "5";' > /etc/apt/apt.conf.d/80-retries
+
+# Debian 11 (bullseye) reached the end of its LTS support in August 2026
+# and its packages are moving off deb.debian.org (bullseye-security
+# already returns 404 for packages its index still lists), so install
+# from archive.debian.org, where the release is kept permanently.
+RUN printf '%s\n' \
+      'deb http://archive.debian.org/debian bullseye main' \
+      'deb http://archive.debian.org/debian bullseye-updates main' \
+      'deb http://archive.debian.org/debian-security bullseye-security main' \
+      > /etc/apt/sources.list && \
+    rm -f /etc/apt/sources.list.d/*
+
+# Build dependencies for crosstool-NG and the ONIE image.
+RUN apt-get update && apt-get install -y \
+    autoconf \
+    autoconf-archive \
+    automake \
+    autopoint \
+    bc \
+    bison \
+    bsdmainutils \
+    build-essential \
+    coreutils \
+    cpio \
+    curl \
+    device-tree-compiler \
+    dosfstools \
+    efitools \
+    fakeroot \
+    flex \
+    gawk \
+    git \
+    gnupg2 \
+    gperf \
+    help2man \
+    libefivar-dev \
+    libelf-dev \
+    libexpat1 \
+    libexpat1-dev \
+    libncurses5 \
+    libncurses5-dev \
+    libnspr4-dev \
+    libnss3-dev \
+    libnss3-tools \
+    libpopt-dev \
+    libssl-dev \
+    libtool \
+    libtool-bin \
+    locales \
+    mtools \
+    pkgconf \
+    python-all-dev \
+    python3-all-dev \
+    python3-sphinx \
+    python3-venv \
+    rst2pdf \
+    rsync \
+    sbsigntool \
+    stgit \
+    texinfo \
+    tree \
+    u-boot-tools \
+    unzip \
+    util-linux \
+    uuid-dev \
+    uuid-runtime \
+    wget \
+    zip \
+    xorriso \
+    && rm -rf /var/lib/apt/lists/*
+
+# Generate UTF-8 locale (needed for the uclibc / crosstool-NG build).
+RUN sed -i -e 's/# en_US.UTF-8 UTF-8/en_US.UTF-8 UTF-8/' /etc/locale.gen && \
+    locale-gen
+
+# Create the build user with the same UID/GID as the host invoker so
+# build artifacts are not left owned by root.  Override at build time
+# with --build-arg UID=$(id -u) --build-arg GID=$(id -g).
+#
+# NOTE: -l avoids docker layer-export hangs for large UIDs.
+#       (https://github.com/moby/moby/issues/5419#issuecomment-41478290)
+ARG UID=1000
+ARG GID=1000
+# Reuse the host's primary group when that GID is already taken in the
+# image.  Debian fills the low GID range with system groups (30 dip, 50
+# staff, 100 users), so insisting on creating our own group makes the image
+# unbuildable for anyone whose primary group lands there -- common with
+# central/NFS accounts, and the norm on macOS hosts (GID 20 = dialout here).
+# When the group is reused, "build" no longer exists as a group name, so
+# chown by numeric id.
+RUN if getent group "$GID" >/dev/null; then \
+        echo "GID $GID is $(getent group "$GID" | cut -d: -f1); reusing it"; \
+    else \
+        groupadd -g "$GID" build; \
+    fi && \
+    useradd -l -m -u "$UID" -g "$GID" -s /bin/bash build && \
+    chown -R "$UID:$GID" /onie
+
+# /sbin and /usr/sbin hold tools the build invokes.  Set this in two places
+# so it holds however the image is invoked:
+#   ENV        -- non-login shells (docker run <cmd>, bash -c)
+#   profile.d  -- login shells.  Debian's /etc/profile *replaces* PATH for
+#                 non-root users with one that omits both sbin dirs, and it
+#                 does so before sourcing profile.d, so the snippet wins.
+# ~/.bashrc, which this used to use, works for neither: Debian's default
+# .bashrc returns early when the shell is not interactive, so under the
+# workflow's "bash -lc" the PATH line was never reached.
+ENV PATH="/sbin:/usr/sbin:${PATH}"
+RUN printf '%s\n' 'export PATH="/sbin:/usr/sbin:$PATH"' \
+        > /etc/profile.d/00-onie-sbin.sh
+
+USER build
+
+# The build runs git commands; give it a default identity.
+RUN git config --global user.email "build@example.com" && \
+    git config --global user.name "Build User"
+
+CMD ["/bin/bash", "--login"]

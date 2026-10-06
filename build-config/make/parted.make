@@ -11,7 +11,8 @@
 
 PARTED_VERSION		= 3.1
 PARTED_TARBALL		= parted-$(PARTED_VERSION).tar.xz
-PARTED_TARBALL_URLS	+= $(ONIE_MIRROR) http://ftp.gnu.org/gnu/parted/
+PARTED_TARBALL_URLS	+= $(ONIE_MIRROR) http://ftp.gnu.org/gnu/parted \
+			   http://mirrors.kernel.org/gnu/parted
 PARTED_BUILD_DIR	= $(USER_BUILDDIR)/parted
 PARTED_DIR		= $(PARTED_BUILD_DIR)/parted-$(PARTED_VERSION)
 
